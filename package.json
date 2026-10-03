@@ -1,1 +1,9 @@
-{"name":"uni-planner","private":true,"type":"module","scripts":{"test":"node --test test/*.test.js"}}
+{
+  "name": "uni-planner",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "bundle": "node bundle.mjs"
+  }
+}
