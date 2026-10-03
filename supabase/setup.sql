@@ -85,3 +85,12 @@ create or replace function public.planner_prune_sent() returns void language sql
   delete from public.planner_sent where sent_at < now() - interval '60 days';
 $$;
 revoke all on function public.planner_prune_sent() from public, anon, authenticated;
+
+-- Server-only settings for the notification sender (VAPID keys, cron secret).
+-- RLS on with no policies: the app can't read it; only the sender (service role) can.
+-- Filled once by hand in the SQL Editor; values never go in the repo.
+create table if not exists public.planner_private (
+  key    text primary key,
+  value  text not null
+);
+alter table public.planner_private enable row level security;

@@ -1,13 +1,26 @@
 // Uni Planner notification sender.
 // Called every minute by pg_cron (header x-cron-secret), and by the app's "Send test" button (user's login token).
-// Secrets: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT, CRON_SECRET.
-// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase automatically.
+// Settings: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT, CRON_SECRET — read from Edge Function secrets,
+// or else from the server-only table public.planner_private. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are automatic.
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { remindersBetween, sendPush } from './core.js';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const db = createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false } });
-const vapid = { publicKey: env('VAPID_PUBLIC_KEY'), privateKey: env('VAPID_PRIVATE_KEY'), subject: env('VAPID_SUBJECT') || 'mailto:planner@example.com' };
+const vapid = { publicKey: '', privateKey: '', subject: '' };
+let cronSecret = '';
+let configLoaded = false;
+async function loadConfig() {
+  if (configLoaded) return;
+  const { data } = await db.from('planner_private').select('key,value');
+  const t = Object.fromEntries((data ?? []).map(r => [r.key, r.value]));
+  const get = (k: string) => env(k) || t[k] || '';
+  vapid.publicKey = get('VAPID_PUBLIC_KEY'); vapid.privateKey = get('VAPID_PRIVATE_KEY');
+  vapid.subject = get('VAPID_SUBJECT') || 'mailto:planner@example.com';
+  cronSecret = get('CRON_SECRET');
+  if (!vapid.publicKey || !vapid.privateKey || !cronSecret) throw new Error('Notification keys are not set up.');
+  configLoaded = true;
+}
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, apikey, content-type, x-client-info',
@@ -64,8 +77,9 @@ async function runSchedule() {
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   try {
+    await loadConfig();
     const secret = req.headers.get('x-cron-secret');
-    if (secret && env('CRON_SECRET') && secret === env('CRON_SECRET')) return json(await runSchedule());
+    if (secret && secret === cronSecret) return json(await runSchedule());
 
     // Otherwise it must be the signed-in app asking for a test notification.
     const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
