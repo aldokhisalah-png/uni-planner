@@ -6,7 +6,12 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 import { remindersBetween, sendPush } from './core.js';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
-const db = createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'), { auth: { persistSession: false } });
+// Server key: the legacy service_role key if present, otherwise the project's default secret key.
+function serverKey() {
+  if (env('SUPABASE_SERVICE_ROLE_KEY')) return env('SUPABASE_SERVICE_ROLE_KEY');
+  try { const k = JSON.parse(env('SUPABASE_SECRET_KEYS') || '{}'); return k.default || Object.values(k)[0] || ''; } catch { return ''; }
+}
+const db = createClient(env('SUPABASE_URL'), serverKey(), { auth: { persistSession: false } });
 const vapid = { publicKey: '', privateKey: '', subject: '' };
 let cronSecret = '';
 let configLoaded = false;
