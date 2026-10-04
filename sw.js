@@ -1,6 +1,6 @@
 // Offline cache + push notifications.
 // Bump VERSION whenever the app's files change, so installed copies pick up the new version.
-const VERSION = 'uni-planner-v1';
+const VERSION = 'uni-planner-v2';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'config.js', 'styles/app.css', 'vendor/supabase.js',
   'src/app.js', 'src/seed.js', 'supabase/functions/planner-push/core.js',

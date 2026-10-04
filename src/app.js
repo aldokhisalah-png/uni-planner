@@ -1,4 +1,4 @@
-// Uni Planner — timetable, deadlines and reminder settings, stored in Supabase.
+// Fall '26 planner — timetable, deadlines and reminder settings, stored in Supabase.
 import { remindersBetween, msToLocal, localToMs, addDays, prettyDate, b64urlToBytes, KIND_LABELS, COURSE_NAMES, DEFAULT_SETTINGS, pad }
   from '../supabase/functions/planner-push/core.js';
 import { SEED_SETTINGS, SEED_CLASSES, SEED_EVENTS } from './seed.js';
@@ -15,18 +15,9 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const ls = { get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} } };
 
 const COURSES = ['BIOL 110', 'MA 265', 'CE 337', 'CE 462', 'CE 468', 'CE 400', 'AUM'];
-const COLOR = { 'BIOL 110': '--c-biol', 'MA 265': '--c-ma', 'CE 337': '--c-337', 'CE 462': '--c-462', 'CE 468': '--c-468', 'CE 400': '--c-400', AUM: '--c-aum' };
-const col = course => `var(${COLOR[course] || '--accent'})`;
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const NOTIFY_KINDS = ['gca', 'exam', 'quiz', 'assignment', 'hw', 'lab', 'prelab', 'project'];
-const ICONS = {
-  today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
-  week: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16M15 4v16"/></svg>',
-  calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
-  deadlines: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="m3 6 1.5 1.5L7 5M3 12l1.5 1.5L7 11M3 18l1.5 1.5L7 17"/></svg>',
-  settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>'
-};
 const VIEWS = [['today', 'Today'], ['week', 'Week'], ['calendar', 'Calendar'], ['deadlines', 'Deadlines'], ['settings', 'Reminders']];
 
 const st = {
@@ -151,18 +142,18 @@ async function testPush() {
 
 // ---------- shell ----------
 function renderMessage(msg) {
-  $app.innerHTML = `<div class="login"><h1>Uni Planner</h1><div class="card"><p>${esc(msg)}</p><button class="btn" id="retry">Try again</button></div></div>`;
+  $app.innerHTML = `<div class="login"><h1>Fall <i>’26</i></h1><div class="card"><p>${esc(msg)}</p><div><button class="btn primary" id="retry">Try again</button></div></div></div>`;
   document.getElementById('retry').onclick = () => loadData();
 }
 function renderLogin(err = '') {
   $app.innerHTML = `<div class="login">
-    <div><div class="eyebrow">AUM · Fall 2026</div><h1 style="font-size:34px">Uni Planner</h1>
-    <p class="muted">Sign in with the same account you use for PPL Coach and Nutrition Coach.</p></div>
+    <div class="head-t"><span class="meta">AUM · Computer Eng.</span><h1>Fall <i>’26</i></h1>
+      <p class="lede">Sign in with the same account you use for PPL Coach and Nutrition Coach.</p></div>
     <form class="card" id="login">
-      <div class="field"><label for="em">Email</label><input id="em" type="email" autocomplete="email" required></div>
-      <div class="field"><label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password" required></div>
+      <div class="field"><label for="em">Email</label><input class="in" id="em" type="email" autocomplete="email" required></div>
+      <div class="field"><label for="pw">Password</label><input class="in" id="pw" type="password" autocomplete="current-password" required></div>
       ${err ? `<p class="err">${esc(err)}</p>` : ''}
-      <button class="btn primary" type="submit">Sign in</button>
+      <div><button class="btn primary" type="submit">Sign in</button></div>
     </form></div>`;
   document.getElementById('login').onsubmit = async ev => {
     ev.preventDefault();
@@ -174,13 +165,13 @@ function renderLogin(err = '') {
 function render() {
   if (!st.session) return renderLogin();
   if (!st.loaded) { $app.innerHTML = '<p class="boot">Loading your planner…</p>'; return; }
-  const t = nowLocal(), w = termWeek(t.date);
-  $app.innerHTML = `
-  <header class="top"><div class="top-in">
-    <div class="grow"><h1>Uni Planner</h1><div class="sub">${prettyDate(t.date)}${w >= 1 && w <= 19 ? ` · Week ${w}` : ''}${st.offline ? ' · offline copy' : ''}</div></div>
-    <nav class="tabs" aria-label="Sections">${VIEWS.map(([id, label]) => `<button class="tab" data-view="${id}" ${st.view === id ? 'aria-current="page"' : ''}>${ICONS[id]}<span>${label}</span></button>`).join('')}</nav>
-  </div></header>
-  <main id="main">${({ today: viewToday, week: viewWeek, calendar: viewCalendar, deadlines: viewDeadlines, settings: viewSettings })[st.view]()}</main>`;
+  $app.innerHTML = `<div class="wrap">
+    <header class="top">
+      <div class="brand"><b>Fall <i>’26</i></b><span>AUM · Computer Eng.</span>${st.offline ? '<em>offline copy</em>' : ''}</div>
+      <nav class="tabs" aria-label="Sections">${VIEWS.map(([id, label]) => `<button class="tab" data-view="${id}" ${st.view === id ? 'aria-current="page"' : ''}>${label}</button>`).join('')}</nav>
+    </header>
+    <main id="main" class="view">${({ today: viewToday, week: viewWeek, calendar: viewCalendar, deadlines: viewDeadlines, settings: viewSettings })[st.view]()}</main>
+  </div>`;
   $app.querySelectorAll('.tab').forEach(b => b.onclick = () => go(b.dataset.view));
   bind();
 }
@@ -189,198 +180,292 @@ function go(view) {
   render(); window.scrollTo(0, 0);
 }
 
-// ---------- views ----------
-function pushBanner() {
-  if (st.push === 'on' || st.push === 'checking') return '';
-  const msg = {
-    off: 'Turn on reminders to get a notification 1 hour and 30 minutes before each class, and the evening before graded work.',
-    'ios-install': 'To get reminders on iPhone, tap Share, then Add to Home Screen, then open Planner from your Home Screen.',
-    denied: 'Notifications are blocked for this app. Allow them in your browser or phone settings, then reload.',
-    unsupported: 'This browser cannot receive notifications. Use Chrome on Android, or add the app to your iPhone Home Screen.'
-  }[st.push];
-  return `<div class="banner"><p>${msg}</p>${st.push === 'off' ? `<button class="btn primary" data-act="push-on" ${st.pushBusy ? 'disabled' : ''}>Turn on reminders</button>` : ''}</div>`;
+// ---------- shared pieces ----------
+const COURSE_INFO = {
+  'BIOL 110': { name: 'Fundamentals of Biology I', h: 150 },
+  'MA 265': { name: 'Linear Algebra', h: 60 },
+  'CE 337': { name: 'ASIC Design Lab', h: 295 },
+  'CE 462': { name: 'OOP in C++ & Java', h: 225 },
+  'CE 468': { name: 'Compilers', h: 15 },
+  'CE 400': { name: 'Prof. Dev. & Grad Project I', h: 95 },
+  AUM: { name: 'Academic calendar', h: null }
+};
+const info = course => COURSE_INFO[course] || { name: course, h: 200 };
+// Colour hooks: tone() adds the classes, hue() the inline hue, for any element that shows a course.
+const isExamish = e => e.kind === 'exam' || (e.course === 'AUM' && /exam/i.test(e.title));
+const tone = (course, exam = false) => exam ? 'c exams' : info(course).h == null ? 'c aum' : 'c';
+const hue = course => `--h:${info(course).h ?? 0}`;
+const EXAM_RANGES = [['2026-11-07', '2026-11-14'], ['2027-01-16', '2027-01-24']];
+const inExams = d => EXAM_RANGES.some(([a, b]) => d >= a && d <= b);
+const NUM = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+const word = n => NUM[n] || String(n);
+const daysUntil = date => Math.round((Date.parse(date) - Date.parse(nowLocal().date)) / 864e5);
+function rel(date) {
+  const d = daysUntil(date);
+  return d < 0 ? '' : d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : d < 14 ? `In ${d} days` : `In ${Math.round(d / 7)} weeks`;
 }
 function classesOn(date) {
-  const dow = msToLocal(localToMs(date, '12:00', off()), off()).dow;
-  const s = st.settings;
+  const s = st.settings, dow = msToLocal(localToMs(date, '12:00', off()), off()).dow;
   if (date < s.term_start || date > s.term_end || (s.skip_dates || []).includes(date)) return [];
   return st.classes.filter(c => Number(c.weekday) === dow);
 }
-function relDays(date) {
-  const n = Math.round((Date.parse(date) - Date.parse(nowLocal().date)) / 864e5);
-  return n === 0 ? 'today' : n === 1 ? 'tomorrow' : n < 0 ? `${-n} days ago` : `in ${n} days`;
-}
-function viewToday() {
-  const t = nowLocal();
-  let day = t.date, list = classesOn(day);
-  const nowT = t.time;
-  let label = 'Today';
-  if (!list.length || list.every(c => hhmm(c.end_time) <= nowT)) {
-    for (let i = 1; i <= 21; i++) { const d = addDays(t.date, i); const l = classesOn(d); if (l.length) { day = d; list = l; label = i === 1 ? 'Tomorrow' : 'Next class day'; break; } }
-  }
-  const cls = list.map(c => {
-    const s = hhmm(c.start_time), e = hhmm(c.end_time);
-    const state = day === t.date ? (e <= nowT ? 'past' : s <= nowT ? 'now' : '') : '';
-    return `<div class="cls ${state}" style="--c:${col(c.course)}"><span class="t">${s}–${e}${state === 'now' ? '<br>now' : ''}</span>
-      <span><b>${esc(c.course)}</b> ${c.kind === 'Lab' ? 'Lab' : 'Lecture'}<span class="sub">${esc(c.room || '')}${c.instructor ? ' · ' + esc(c.instructor) : ''}</span></span></div>`;
-  }).join('');
-  const soon = st.events.filter(e => graded(e) && !e.done && evLocal(e).date >= t.date).slice(0, 6);
-  const next = remindersBetween(st.settings, st.classes, st.events, Date.now(), Date.now() + 7 * 864e5).slice(0, 4);
-  return `${pushBanner()}
-  <div class="today-grid">
-    <section class="card"><div class="row-between" style="margin-bottom:10px"><h2>${label}</h2><span class="eyebrow">${prettyDate(day)}</span></div>
-      ${cls || '<p class="empty">No classes in the next three weeks.</p>'}</section>
-    <section class="card"><div class="row-between" style="margin-bottom:10px"><h2>Due soon</h2><button class="linkbtn" data-go="deadlines">All deadlines</button></div>
-      <div class="stack">${soon.map(e => { const l = evLocal(e); return `<div style="--c:${col(e.course)}">
-        <span class="eyebrow" style="color:var(--accent)">${prettyDate(l.date)} · ${relDays(l.date)}</span><br>
-        <span class="tag">${esc(e.course)}</span>${esc(e.title)}${e.weight ? `<span class="pct">${esc(e.weight)}</span>` : ''}
-        ${e.note ? `<span class="sub">${esc(e.note)}</span>` : ''}</div>`; }).join('') || '<p class="empty">Nothing due. Enjoy it.</p>'}</div></section>
-    <section class="card"><div class="row-between" style="margin-bottom:10px"><h2>Next reminders</h2><button class="linkbtn" data-go="settings">Settings</button></div>
-      <div class="list">${next.map(r => { const l = msToLocal(r.at, off()); return `<div><span>${esc(r.title)}</span><span class="mono small muted">${l.date === t.date ? 'today' : prettyDate(l.date)} ${l.time}</span></div>`; }).join('') || '<p class="empty">No reminders in the next 7 days.</p>'}</div>
-      ${st.push !== 'on' ? '<p class="note" style="margin:8px 0 0">These only reach you once reminders are on for this device.</p>' : ''}</section>
-  </div>`;
-}
-
-function viewWeek() {
-  const H0 = 8, H1 = 20, PX = 54, h = (H1 - H0) * PX;
-  const toMin = t => { const [a, b] = hhmm(t).split(':').map(Number); return a * 60 + b; };
-  const today = nowLocal().dow;
-  let html = '<div class="dh"></div>' + DAYS.slice(0, 5).map((n, i) => `<div class="dh${i === today ? ' today' : ''}">${n}</div>`).join('');
-  html += `<div class="times" style="height:${h + 8}px">` + Array.from({ length: H1 - H0 + 1 }, (_, i) => `<span class="hl" style="top:${i * PX + 4}px">${pad(H0 + i)}:00</span>`).join('') + '</div>';
-  for (let d = 0; d < 5; d++) {
-    html += `<div class="col${d === today ? ' today' : ''}" style="height:${h + 8}px">` + Array.from({ length: H1 - H0 + 1 }, (_, i) => `<div class="hr" style="top:${i * PX + 4}px"></div>`).join('');
-    for (const c of st.classes.filter(k => Number(k.weekday) === d)) {
-      const top = (toMin(c.start_time) - H0 * 60) / 60 * PX + 4, ht = (toMin(c.end_time) - toMin(c.start_time)) / 60 * PX - 3;
-      html += `<button class="blk" data-class="${c.id}" style="--c:${col(c.course)};top:${top}px;height:${ht}px" aria-label="Edit ${esc(c.course)} ${esc(c.kind)}">
-        <b>${esc(c.course)}${c.kind === 'Lab' ? ' Lab' : ''}</b><span class="t">${hhmm(c.start_time)}–${hhmm(c.end_time)}</span><br>${esc(c.room || '')}${ht > 60 && c.instructor ? `<br><span class="t">${esc(c.instructor)}</span>` : ''}</button>`;
-    }
-    html += '</div>';
-  }
-  const used = [...new Set(st.classes.map(c => c.course))];
-  const sat = st.classes.filter(c => Number(c.weekday) > 4);
-  return `<section><div class="sec-head"><h2>Weekly timetable</h2><button class="btn" data-act="add-class">Add class</button></div>
-    <div class="tt-scroll"><div class="tt">${html}</div></div>
-    ${sat.length ? `<p class="note">Also on ${sat.map(c => `${DAYS[c.weekday]} ${hhmm(c.start_time)} ${esc(c.course)}`).join(', ')}.</p>` : ''}
-    <div class="legend">${used.map(k => `<span style="--c:${col(k)}"><i class="sw"></i>${esc(k)} · ${esc(COURSE_NAMES[k] || '')}</span>`).join('')}</div>
-    <p class="note">Tap a class to change its time or room. Reminders follow these times.</p></section>`;
-}
-
-function dayFlags(date) {
-  const s = st.settings, f = [];
-  const evs = st.events.filter(e => evLocal(e).date === date);
-  if (evs.some(e => e.kind === 'exam') || inRange(date, '2026-11-07', '2026-11-14') || inRange(date, '2027-01-16', '2027-01-24')) f.push('exam');
-  if ((s.skip_dates || []).includes(date) && !f.includes('exam')) f.push('hol');
-  return { f, evs };
-}
-const inRange = (d, a, b) => d >= a && d <= b;
-function viewCalendar() {
-  const s = st.settings, t = nowLocal().date;
-  const out = [];
-  let [y, m] = s.term_start.split('-').map(Number); m -= 1;
-  const [ey, em] = s.term_end.split('-').map(Number);
-  while (y < ey || (y === ey && m <= em - 1)) {
-    let g = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(w => `<div class="wd">${w}</div>`).join('');
-    const first = new Date(Date.UTC(y, m, 1)).getUTCDay(), n = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
-    g += '<div></div>'.repeat(first);
-    for (let d = 1; d <= n; d++) {
-      const date = `${y}-${pad(m + 1)}-${pad(d)}`, dow = (first + d - 1) % 7;
-      const { f, evs } = dayFlags(date);
-      const gr = evs.filter(graded);
-      const cls = ['day', ...f]; if (dow >= 5) cls.push('off'); if (date === t) cls.push('today'); if (date === st.selDay) cls.push('sel');
-      g += `<button class="${cls.join(' ')}" data-day="${date}" aria-label="${prettyDate(date)}${gr.length ? `, ${gr.length} due` : ''}">${d}<span class="dots">${gr.map(e => `<i style="--c:${col(e.course)}"></i>`).join('')}</span></button>`;
-    }
-    out.push(`<div class="month"><h3>${MONTHS[m]} ${y}</h3><div class="mg">${g}</div></div>`);
-    if (++m === 12) { m = 0; y++; }
-  }
-  const sel = st.selDay;
-  const dayList = sel ? (() => {
-    const cl = classesOn(sel), evs = st.events.filter(e => evLocal(e).date === sel);
-    return `<section class="card" id="daycard"><div class="row-between" style="margin-bottom:8px"><h2>${prettyDate(sel)}</h2><button class="linkbtn" data-act="add-event" data-date="${sel}">Add item</button></div>
-      <div class="stack">${evs.map(itemRow).join('')}${cl.map(c => `<div class="small" style="--c:${col(c.course)}"><span class="tag">${esc(c.course)}</span>${hhmm(c.start_time)}–${hhmm(c.end_time)} ${c.kind} · ${esc(c.room || '')}</div>`).join('')}
-      ${!evs.length && !cl.length ? '<p class="empty">Nothing on this day.</p>' : ''}</div></section>`;
-  })() : '';
-  return `<section><div class="sec-head"><h2>Semester calendar</h2><span class="note">Dots mark graded work. Tap a day to see it.</span></div>
-    ${dayList}<div class="months" style="margin-top:${sel ? '16px' : '0'}">${out.join('')}</div>
-    <div class="mkey"><span><i style="background:var(--examBg);border:1px solid var(--exam)"></i>Exams</span><span><i style="background:var(--hol)"></i>No classes</span><span><i style="border:1px solid var(--accent)"></i>Today</span></div></section>`;
-}
-
+const isOff = date => date < st.settings.term_start || date > st.settings.term_end || (st.settings.skip_dates || []).includes(date);
 function willRemind(e) {
   const s = st.settings;
   return s.notify_events && e.remind !== false && !e.done && (s.event_kinds || []).includes(e.kind);
 }
-function itemRow(e) {
-  const l = evLocal(e), cls = ['item', e.kind]; if (e.done) cls.push('done');
-  const box = graded(e) ? `<input type="checkbox" id="done-${e.id}" data-done="${e.id}" ${e.done ? 'checked' : ''} aria-label="Done: ${esc(e.title)}">` : '<span></span>';
-  return `<div class="${cls.join(' ')}" style="--c:${col(e.course)}">${box}
-    <span class="d">${prettyDate(l.date)}${e.all_day ? '' : '<br>' + l.time}</span>
-    <button class="what" data-event="${e.id}"><span class="tag">${esc(e.course)}</span><span class="what-title">${esc(e.title)}</span>${e.weight ? `<span class="pct">${esc(e.weight)}</span>` : ''}
-      ${willRemind(e) ? ' <span class="bell" title="Reminder the evening before">· reminder</span>' : ''}${e.note ? `<span class="sub">${esc(e.note)}</span>` : ''}</button></div>`;
+const gradedList = () => st.events.filter(graded);
+function progress() {
+  const g = gradedList(), d = g.filter(e => e.done).length;
+  return `<div class="prog"><div class="prog-l"><span>Done this term</span><b>${d} / ${g.length}</b></div>
+    <div class="bar"><i style="width:${g.length ? d / g.length * 100 : 0}%"></i></div></div>`;
 }
+function checkBtn(e, sm = false) {
+  return `<button class="check${sm ? ' sm' : ''}${e.done ? ' on' : ''}" data-done="${e.id}" aria-pressed="${!!e.done}" aria-label="${e.done ? 'Mark not done' : 'Mark done'}: ${esc(e.title)}">${e.done ? '✓' : ''}</button>`;
+}
+function tags(e) {
+  const ex = isExamish(e);
+  return `<span class="tags"><span class="code">${ex && e.course === 'AUM' ? 'Exams' : esc(e.course)}</span>${e.weight ? `<span class="pct">${esc(e.weight)}</span>` : ''}${willRemind(e) ? '<span class="bell">· reminder</span>' : ''}</span>`;
+}
+// One deadline row: tick (graded work) or bullet, date, then the tappable body that opens the editor.
+function rowHtml(e, withDate = true) {
+  const l = evLocal(e), ex = isExamish(e);
+  const kind = ex ? 'exam' : e.kind === 'academic' ? 'academic' : e.kind === 'info' ? 'info' : '';
+  return `<div class="row ${kind} ${e.done ? 'done' : ''} ${withDate ? '' : 'nodate'} ${tone(e.course, ex)}" style="${hue(e.course)}">
+    ${graded(e) ? checkBtn(e, true) : '<span class="bullet"></span>'}
+    ${withDate ? `<span class="when">${prettyDate(l.date)}${e.all_day ? '' : '<br>' + l.time}</span>` : ''}
+    <button class="open" data-event="${e.id}">${tags(e)}<span class="ttl">${esc(e.title)}</span>${e.note ? `<span class="sub">${esc(e.note)}</span>` : ''}</button>
+  </div>`;
+}
+function pushNotice() {
+  if (st.push === 'on' || st.push === 'checking') return '';
+  const msg = {
+    off: 'Reminders are off on this device. Turn them on to get a nudge an hour and 30 minutes before each class, and the evening before graded work.',
+    'ios-install': 'To get reminders on iPhone, tap Share, then Add to Home Screen, then open the planner from your Home Screen.',
+    denied: 'Notifications are blocked for this app. Allow them in your browser or phone settings, then reload.',
+    unsupported: 'This browser can’t receive notifications. Use Chrome on Android, or add the app to your iPhone Home Screen.'
+  }[st.push];
+  return `<div class="notice"><p>${msg}</p>${st.push === 'off' ? `<button class="btn sage" data-act="push-on" ${st.pushBusy ? 'disabled' : ''}>Turn on reminders</button>` : ''}</div>`;
+}
+
+// ---------- Today ----------
+function viewToday() {
+  const t = nowLocal(), today = t.date, s = st.settings;
+  const tw = termWeek(today);
+  const weekLabel = tw < 1 ? 'Before term' : tw <= 17 ? `Week ${tw} of 17` : today <= '2027-01-24' ? 'Final exams' : 'Term over';
+  const hour = Number(t.time.slice(0, 2));
+  const greet = hour >= 5 && hour < 12 ? 'morning' : hour >= 12 && hour < 18 ? 'afternoon' : 'evening';
+  const [y, m, d] = today.split('-').map(Number);
+  const dateLabel = `${DAYS[t.dow]}, ${d} ${MONTHS[m - 1]}`;
+
+  // Summary: plain facts only — classes today, things due today, and the next graded item after today.
+  const todays = classesOn(today);
+  const dueToday = st.events.filter(e => graded(e) && !e.done && evLocal(e).date === today).length;
+  let summary = todays.length ? `${word(todays.length)} class${todays.length > 1 ? 'es' : ''} today` : 'No classes today';
+  summary += dueToday ? `, and ${word(dueToday).toLowerCase()} thing${dueToday > 1 ? 's' : ''} due.` : ', and nothing due.';
+  const next = st.events.find(e => graded(e) && !e.done && evLocal(e).date > today);
+  summary += next ? ` Next up: ${next.course} ${next.title}, ${rel(evLocal(next).date).toLowerCase()}.` : ' Nothing else is due this term.';
+
+  const t0 = Date.parse(s.term_start), t1 = Date.parse(s.term_end);
+  const termPct = Math.min(100, Math.max(0, Math.round((Date.parse(today) - t0) / (t1 - t0) * 100)));
+  const short = ds => { const [, mm, dd] = ds.split('-').map(Number); return `${dd} ${MONTHS[mm - 1].slice(0, 3)}`; };
+
+  // Week strip: Sunday → Saturday of this week.
+  const sun = addDays(today, -t.dow);
+  const strip = Array.from({ length: 7 }, (_, i) => {
+    const ds = addDays(sun, i), n = classesOn(ds).length, wk = i >= 5;
+    const dues = st.events.filter(e => graded(e) && evLocal(e).date === ds);
+    const note = inExams(ds) ? 'Exams' : wk ? 'Free' : isOff(ds) ? (ds < s.term_start || ds > s.term_end ? '—' : 'No classes') : `${n} class${n === 1 ? '' : 'es'}`;
+    const cls = ds === today ? 'now' : wk ? 'off' : ds < today ? 'past' : '';
+    return `<button class="sday ${cls}" data-strip="${ds}" aria-label="${prettyDate(ds)}: ${note}${dues.length ? `, ${dues.length} due` : ''}">
+      <span class="wd">${DAYS[i].slice(0, 3)}</span><span class="n">${Number(ds.slice(8))}</span>
+      <span class="dots">${dues.map(e => `<i class="${tone(e.course)}" style="${hue(e.course)}"></i>`).join('')}</span>
+      <span class="note">${note}</span></button>`;
+  }).join('');
+
+  // Today's classes, or why there are none and when the next one is.
+  const nowT = t.time;
+  let classesHtml;
+  if (todays.length) {
+    classesHtml = `<div class="cls-list">${todays.map(c => {
+      const s0 = hhmm(c.start_time), e0 = hhmm(c.end_time), now = s0 <= nowT && nowT < e0, past = e0 <= nowT;
+      return `<div class="cls ${now ? 'now' : ''} ${past ? 'past' : ''} ${tone(c.course)}" style="${hue(c.course)}">
+        <div class="t">${s0}<small>${e0}</small></div><div class="rail"></div>
+        <div><div class="nm">${esc(info(c.course).name)}${now ? '<span class="pill">Now</span>' : ''}</div>
+        <div class="sub">${esc(c.course)} ${c.kind === 'Lab' ? 'Lab' : 'Lecture'} · <span>${esc(c.room || '')}</span></div></div></div>`;
+    }).join('')}</div>`;
+  } else {
+    const why = t.dow >= 5 ? 'Fridays and Saturdays are yours.' : inExams(today) ? 'It’s exam week. Check Moodle for your exam times.'
+      : (today < s.term_start || today > s.term_end) ? 'The term isn’t in session.' : 'A day off from classes.';
+    let nextC = '';
+    for (let i = 1; i <= 21; i++) {
+      const ds = addDays(today, i), l = classesOn(ds);
+      if (l.length) { const c = l[0]; nextC = `Next class: ${esc(c.course)} ${c.kind === 'Lab' ? 'Lab' : 'Lecture'}, ${i === 1 ? 'tomorrow' : prettyDate(ds)} at ${hhmm(c.start_time)}.`; break; }
+    }
+    classesHtml = `<div class="off-day"><b>No classes today.</b><p class="muted">${why}${nextC ? ' ' + nextC : ''}</p></div>`;
+  }
+  const meta = todays.length ? `${hhmm(todays[0].start_time)} – ${hhmm(todays[todays.length - 1].end_time)}` : 'Day off';
+
+  const upcoming = st.events.filter(e => e.kind !== 'info' && !e.done && evLocal(e).date >= today).slice(0, 5);
+  const upHtml = upcoming.map(e => {
+    const l = evLocal(e), [, mm, dd] = l.date.split('-').map(Number), ex = isExamish(e);
+    return `<div class="up-row ${tone(e.course, ex)}" style="${hue(e.course)}">
+      <div class="dt"><b>${dd}</b><span>${MONTHS[mm - 1].slice(0, 3)}</span></div>
+      <button class="open bd" data-event="${e.id}">
+        <span class="tags"><span class="code">${ex && e.course === 'AUM' ? 'Exams' : esc(e.course)}</span><span class="rel">${rel(l.date)}${e.all_day ? '' : ' · ' + l.time}</span></span>
+        <span class="ttl">${esc(e.title)}${e.weight ? `<span class="pct">${esc(e.weight)}</span>` : ''}</span>
+        ${e.note ? `<span class="sub">${esc(e.note)}</span>` : ''}</button>
+      ${graded(e) ? checkBtn(e) : '<span></span>'}</div>`;
+  }).join('');
+
+  return `${pushNotice()}
+  <section class="hero">
+    <div class="eyebrow">${dateLabel} · ${weekLabel}</div>
+    <h1>Good <i>${greet}</i>.</h1>
+    <p class="summary">${esc(summary)}</p>
+    <div class="prog"><div class="bar"><i style="width:${termPct}%"></i></div>
+      <div class="ends"><span>${short(s.term_start)}</span><span>${termPct}% of the term behind you</span><span>${short(s.term_end)}</span></div></div>
+  </section>
+  <section class="strip" aria-label="This week">${strip}</section>
+  <div class="two-up">
+    <section class="card"><div class="card-h"><h2>Today</h2><span class="meta">${meta}</span></div>${classesHtml}</section>
+    <section class="card" style="gap:12px"><div class="card-h"><h2>Coming up</h2><button class="link" data-go="deadlines">All deadlines →</button></div>
+      <div class="up">${upHtml || '<p class="empty-serif" style="padding:16px 0">Nothing left. You made it.</p>'}</div>
+      <div class="up-foot">${progress()}</div></section>
+  </div>`;
+}
+
+// ---------- Week ----------
+function viewWeek() {
+  const H0 = 8, H1 = 20, PX = 56, OFF = 10, H = (H1 - H0) * PX + OFF * 2;
+  const toMin = x => { const [a, b] = hhmm(x).split(':').map(Number); return a * 60 + b; };
+  const t = nowLocal(), mins = toMin(t.time), teaching = !isOff(t.date);
+  const hours = Array.from({ length: H1 - H0 + 1 }, (_, i) => ({ label: `${pad(H0 + i)}:00`, top: i * PX + OFF }));
+  let html = '<div></div>' + DAYS.slice(0, 5).map((n, i) => `<div class="dh ${i === t.dow ? 'today' : ''}">${n}${i === t.dow ? ' · today' : ''}</div>`).join('');
+  html += `<div class="times" style="height:${H}px">${hours.map(h => `<span class="hl" style="top:${h.top}px">${h.label}</span>`).join('')}</div>`;
+  for (let d = 0; d < 5; d++) {
+    const isT = d === t.dow;
+    html += `<div class="col ${isT ? 'today' : ''}" style="height:${H}px">${hours.map(h => `<div class="hr" style="top:${h.top}px"></div>`).join('')}`;
+    for (const c of st.classes.filter(k => Number(k.weekday) === d)) {
+      const s0 = toMin(c.start_time), e0 = toMin(c.end_time), h = (e0 - s0) / 60 * PX - 4;
+      html += `<button class="blk ${tone(c.course)}" data-class="${c.id}" style="${hue(c.course)};top:${(s0 - H0 * 60) / 60 * PX + OFF + 2}px;height:${h}px" title="${esc(info(c.course).name)} · ${esc(c.instructor || '')}">
+        <b>${esc(c.course)}${c.kind === 'Lab' ? ' Lab' : ''}</b><span>${hhmm(c.start_time)}–${hhmm(c.end_time)}</span>
+        ${h > 48 ? `<span>${esc(c.room || '')}</span>` : ''}${h > 88 && c.instructor ? `<em>${esc(c.instructor)}</em>` : ''}</button>`;
+    }
+    if (isT && teaching && mins >= H0 * 60 && mins <= H1 * 60) html += `<div class="nowline" style="top:${(mins - H0 * 60) / 60 * PX + OFF}px"></div>`;
+    html += '</div>';
+  }
+  const used = Object.keys(COURSE_INFO).filter(k => st.classes.some(c => c.course === k));
+  const extra = st.classes.filter(c => Number(c.weekday) > 4);
+  return `<div class="head"><div class="head-t"><h2 class="title">Your <i>week</i></h2>
+      <p class="lede">Sunday to Thursday, the same every week. Tap a class to change its time or room; reminders follow these times.</p></div>
+      <button class="btn" data-act="add-class">Add class</button></div>
+    <div class="tt-box"><div class="tt">${html}</div></div>
+    ${extra.length ? `<p class="also">Also on ${extra.map(c => `${DAYS[c.weekday]} ${hhmm(c.start_time)} ${esc(c.course)}`).join(', ')}.</p>` : ''}
+    <div class="legend">${used.map(k => `<div class="lg ${tone(k)}" style="${hue(k)}"><i></i><div><b>${k}</b><span>${esc(COURSE_INFO[k].name)}</span></div></div>`).join('')}</div>`;
+}
+
+// ---------- Calendar ----------
+function viewCalendar() {
+  const s = st.settings, today = nowLocal().date;
+  const months = [];
+  let [y, m] = s.term_start.split('-').map(Number); m -= 1;
+  const [ey, em] = s.term_end.split('-').map(Number);
+  while (y < ey || (y === ey && m <= em - 1)) {
+    const first = new Date(Date.UTC(y, m, 1)).getUTCDay(), n = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    let cells = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(w => `<span class="wd">${w}</span>`).join('') + '<span></span>'.repeat(first), count = 0;
+    for (let d = 1; d <= n; d++) {
+      const ds = `${y}-${pad(m + 1)}-${pad(d)}`, wd = (first + d - 1) % 7;
+      const evs = st.events.filter(e => graded(e) && evLocal(e).date === ds); count += evs.length;
+      const cls = ['day'];
+      if (wd >= 5) cls.push('wk');
+      if (inExams(ds)) cls.push('exam'); else if ((s.skip_dates || []).includes(ds)) cls.push('hol');
+      if (ds === today) cls.push('today');
+      if (ds === st.selDay) cls.push('sel');
+      cells += `<button class="${cls.join(' ')}" data-day="${ds}" aria-label="${prettyDate(ds)}${evs.length ? `, ${evs.length} due` : ''}"><span>${d}</span>
+        <span class="dots">${evs.map(e => `<i class="${tone(e.course)}" style="${hue(e.course)}"></i>`).join('')}</span></button>`;
+    }
+    months.push(`<div class="month"><div class="month-h"><b>${MONTHS[m]}</b><span class="meta">${count ? `${count} due` : ''}</span></div><div class="mg">${cells}</div></div>`);
+    if (++m === 12) { m = 0; y++; }
+  }
+  const sel = st.selDay;
+  let panel = '<p class="empty-serif">Pick a day above to see what’s on it.</p>';
+  if (sel) {
+    const evs = st.events.filter(e => evLocal(e).date === sel), cl = classesOn(sel);
+    const emptyText = inExams(sel) ? 'Inside the exam period. Check Moodle for your exact times.' : (s.skip_dates || []).includes(sel) ? 'A day off. Nothing to do but rest.' : 'Nothing on this day.';
+    panel = `<div class="card-h"><h3>${prettyDate(sel)}</h3><span style="display:flex;gap:16px"><button class="link" data-act="add-event" data-date="${sel}">Add item</button><button class="link" data-act="clear-sel">Clear</button></span></div>
+      ${evs.map(e => rowHtml(e, false)).join('')}
+      ${cl.length ? `<div class="cls-list">${cl.map(c => `<div class="cls ${tone(c.course)}" style="${hue(c.course)}"><div class="t">${hhmm(c.start_time)}<small>${hhmm(c.end_time)}</small></div><div class="rail"></div>
+        <div><div class="nm">${esc(info(c.course).name)}</div><div class="sub">${esc(c.course)} ${c.kind === 'Lab' ? 'Lab' : 'Lecture'} · <span>${esc(c.room || '')}</span></div></div></div>`).join('')}</div>` : ''}
+      ${!evs.length && !cl.length ? `<p class="muted">${emptyText}</p>` : ''}`;
+  }
+  return `<div class="head-t"><h2 class="title">The <i>semester</i></h2><p class="lede">Four months, seen from above. Tap any day to see what’s on it.</p></div>
+    <div class="months">${months.join('')}</div>
+    <div class="key"><span><i style="background:var(--exam-bg)"></i>Exam period</span><span><i style="background:var(--raised)"></i>No classes</span><span><i style="background:var(--ink)"></i>Today</span><span><i class="dot"></i>Graded work</span></div>
+    <section class="card" id="daycard" style="gap:14px">${panel}</section>`;
+}
+
+// ---------- Deadlines ----------
 function viewDeadlines() {
   const t = nowLocal(), curW = termWeek(t.date);
   let list = st.events.filter(e => !st.filt.size || st.filt.has(e.course) || e.course === 'AUM');
   if (!st.showPast) list = list.filter(e => termWeek(evLocal(e).date) >= curW);
   const groups = new Map();
   for (const e of list) { const w = termWeek(evLocal(e).date); if (!groups.has(w)) groups.set(w, []); groups.get(w).push(e); }
-  const start = st.settings.term_start;
-  const weeks = [...groups.keys()].sort((a, b) => a - b).map(w => {
-    const s = addDays(start, (w - 1) * 7), e = addDays(s, 6);
-    const lbl = w < 1 ? 'Before term' : `Week ${w}`;
-    return `<div class="wk${w === curW ? ' cur' : ''}"><div class="wl">${lbl}${w === curW ? ' · now' : ''}<small>${prettyDate(s).slice(4)} – ${prettyDate(e).slice(4)}</small></div><div class="rows">${groups.get(w).map(itemRow).join('')}</div></div>`;
+  const short = ds => prettyDate(ds).slice(4);
+  const html = [...groups.keys()].sort((a, b) => a - b).map(w => {
+    const s0 = addDays(st.settings.term_start, (w - 1) * 7);
+    return `<div class="grp ${w === curW ? 'cur' : ''}"><div class="grp-l"><b>${w < 1 ? 'Before term' : `Week ${w}`}</b><span>${short(s0)} – ${short(addDays(s0, 6))}</span>${w === curW ? '<span class="pill">This week</span>' : ''}</div>
+      <div class="rows">${groups.get(w).map(e => rowHtml(e)).join('')}</div></div>`;
   }).join('');
-  const courses = COURSES.filter(c => c !== 'AUM' && st.events.some(e => e.course === c));
-  return `<section><div class="sec-head"><h2>Deadlines</h2><button class="btn primary" data-act="add-event">Add item</button></div>
-    <div class="filters">${courses.map(k => `<button class="chip" data-filt="${k}" aria-pressed="${st.filt.has(k)}" style="--c:${col(k)}"><i class="sw"></i>${k}</button>`).join('')}
-      <label class="toggle"><input type="checkbox" id="showpast" ${st.showPast ? 'checked' : ''}> Show past weeks</label></div>
-    <div class="weeks">${weeks || '<p class="empty">Nothing here.</p>'}</div>
-    <p class="note" style="margin-top:18px">Midterm and final times aren't in the syllabi yet. When they're announced, use Add item with type Exam and you'll get a reminder the evening before.</p></section>`;
+  const courses = Object.keys(COURSE_INFO).filter(c => c !== 'AUM' && st.events.some(e => e.course === c));
+  return `<div class="head"><div class="head-t"><h2 class="title">One week <i>at a time</i></h2>
+      <p class="lede">Everything that’s due, in order. Tick things off as you go; it syncs to your other devices. Tap an item to edit it.</p></div>
+      <div style="flex:0 1 280px;min-width:220px;display:flex;flex-direction:column;gap:12px">${progress()}<button class="btn primary" data-act="add-event" style="align-self:flex-end">Add item</button></div></div>
+    <div class="chips"><button class="chip" data-filt="" aria-pressed="${!st.filt.size}">All</button>
+      ${courses.map(k => `<button class="chip ${tone(k)}" style="${hue(k)}" data-filt="${k}" aria-pressed="${st.filt.has(k)}"><i></i>${k}</button>`).join('')}
+      <button class="link" data-act="past">${st.showPast ? 'Hide past weeks' : 'Show past weeks'}</button></div>
+    <div class="groups">${html || '<p class="empty-serif">Nothing here. Enjoy it.</p>'}</div>
+    <p class="fine">Dates come from each syllabus weekly calendar, matched to your section’s meeting day. Midterm and final times aren’t in the syllabi yet. When they’re announced, use Add item with type Exam and you’ll get a reminder the evening before. Israa &amp; Mi’raj (5 Jan) is pending official confirmation. Check Moodle for syllabus updates.</p>`;
 }
 
+// ---------- Reminders ----------
 function viewSettings() {
   const s = st.settings;
-  const pill = { on: '<span class="pill ok">On</span>', off: '<span class="pill off">Off</span>', checking: '<span class="pill off">Checking</span>', denied: '<span class="pill warn">Blocked</span>', unsupported: '<span class="pill warn">Not supported</span>', 'ios-install': '<span class="pill warn">Add to Home Screen</span>' }[st.push];
+  const pill = { on: '<span class="pill sage">On</span>', off: '<span class="pill soft">Off</span>', checking: '<span class="pill soft">Checking</span>', denied: '<span class="pill warn">Blocked</span>', unsupported: '<span class="pill warn">Not supported</span>', 'ios-install': '<span class="pill warn">Add to Home Screen</span>' }[st.push];
   const upcoming = remindersBetween(s, st.classes, st.events, Date.now(), Date.now() + 7 * 864e5);
   const leads = s.class_leads || [];
-  return `${pushBanner()}
-  <section class="card set">
-    <div class="row-between"><h2>This device</h2>${pill}</div>
-    <p class="note" style="margin:0">${esc(deviceName())}. Each phone or laptop needs reminders turned on once.</p>
-    <div class="inline">
-      ${st.push === 'on' ? `<button class="btn" data-act="push-off" ${st.pushBusy ? 'disabled' : ''}>Turn off on this device</button>` : `<button class="btn primary" data-act="push-on" ${st.pushBusy || st.push === 'denied' || st.push === 'unsupported' ? 'disabled' : ''}>Turn on reminders</button>`}
-      <button class="btn" data-act="push-test" ${st.pushBusy || st.push !== 'on' ? 'disabled' : ''}>Send a test</button>
-    </div>
-  </section>
-  <form class="card set" id="setform">
-    <h2>What to remind you about</h2>
-    <div class="stack">
-      <label class="check"><input type="checkbox" id="s-cls" ${s.notify_classes ? 'checked' : ''}> Before every class</label>
-      <div class="inline small"><span>Remind me</span>
-        <input type="number" id="s-l1" min="0" max="600" step="5" value="${leads[0] ?? ''}" aria-label="First reminder, minutes before"> and
-        <input type="number" id="s-l2" min="0" max="600" step="5" value="${leads[1] ?? ''}" aria-label="Second reminder, minutes before"> minutes before</div>
-    </div>
-    <div class="stack">
-      <label class="check"><input type="checkbox" id="s-ev" ${s.notify_events ? 'checked' : ''}> The day before graded work, at</label>
-      <div class="inline small"><input type="time" id="s-time" value="${hhmm(s.day_before_time)}" aria-label="Reminder time the day before"></div>
-      <div class="kinds">${NOTIFY_KINDS.map(k => `<label class="check small"><input type="checkbox" data-kind="${k}" ${(s.event_kinds || []).includes(k) ? 'checked' : ''}> ${KIND_LABELS[k]}</label>`).join('')}</div>
-    </div>
-    <div class="actions"><button class="btn primary" type="submit">Save</button></div>
-  </form>
-  <section class="card set">
-    <div class="row-between"><h2>Coming up in the next 7 days</h2><span class="mono small muted">${upcoming.length}</span></div>
-    <div class="list">${upcoming.slice(0, 12).map(r => { const l = msToLocal(r.at, off()); return `<div><span>${esc(r.title)}<span class="sub">${esc(r.body)}</span></span><span class="mono small muted" style="white-space:nowrap">${prettyDate(l.date)} ${l.time}</span></div>`; }).join('') || '<p class="empty">Nothing scheduled.</p>'}</div>
-    ${upcoming.length > 12 ? `<p class="note" style="margin:0">and ${upcoming.length - 12} more this week.</p>` : ''}
-  </section>
-  <section class="card set">
-    <h2>Term dates</h2>
-    <div class="two"><div class="field"><label for="t-start">Term starts</label><input type="date" id="t-start" value="${s.term_start}"></div>
-      <div class="field"><label for="t-end">Classes end</label><input type="date" id="t-end" value="${s.term_end}"></div></div>
-    <div class="lbl">Days with no classes <span class="muted small">(no class reminders; tap a day to remove it)</span></div>
-    <div class="skips">${(s.skip_dates || []).slice().sort().map(d => `<button data-unskip="${d}" aria-label="Remove ${prettyDate(d)}">${prettyDate(d)}</button>`).join('') || '<p class="empty">None.</p>'}</div>
-    <div class="inline"><input type="date" id="t-skip" aria-label="Add a day with no classes" style="border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:7px 10px">
-      <button class="btn" data-act="skip-add">Add day</button><button class="btn primary" data-act="term-save">Save dates</button></div>
-  </section>
-  <section class="card set"><h2>Account</h2>
-    <div class="row-between"><span class="small">${esc(st.session.user.email)}</span><button class="btn" data-act="signout">Sign out</button></div></section>`;
+  return `<div class="head-t"><h2 class="title">Your <i>reminders</i></h2><p class="lede">An hour and 30 minutes before each class, and the evening before anything graded. Change it here; every device follows.</p></div>
+  ${pushNotice()}
+  <div class="set-grid">
+    <section class="card"><div class="card-h"><h3>This device</h3>${pill}</div>
+      <p class="muted">${esc(deviceName())}. Each phone or laptop needs reminders turned on once.</p>
+      <div class="inline">
+        ${st.push === 'on' ? `<button class="btn" data-act="push-off" ${st.pushBusy ? 'disabled' : ''}>Turn off here</button>` : `<button class="btn sage" data-act="push-on" ${st.pushBusy || st.push === 'denied' || st.push === 'unsupported' ? 'disabled' : ''}>Turn on reminders</button>`}
+        <button class="btn" data-act="push-test" ${st.pushBusy || st.push !== 'on' ? 'disabled' : ''}>Send a test</button></div></section>
+    <form class="card" id="setform"><div class="card-h"><h3>What to remind you about</h3></div>
+      <div class="fields">
+        <label class="tick"><input type="checkbox" id="s-cls" ${s.notify_classes ? 'checked' : ''}> Before every class</label>
+        <div class="inline">Remind me <input class="in" type="number" id="s-l1" min="0" max="600" step="5" value="${leads[0] ?? ''}" aria-label="First reminder, minutes before"> and
+          <input class="in" type="number" id="s-l2" min="0" max="600" step="5" value="${leads[1] ?? ''}" aria-label="Second reminder, minutes before"> minutes before</div>
+        <label class="tick"><input type="checkbox" id="s-ev" ${s.notify_events ? 'checked' : ''}> The day before graded work, at</label>
+        <div class="inline"><input class="in" type="time" id="s-time" value="${hhmm(s.day_before_time)}" aria-label="Reminder time the day before"></div>
+        <div class="kinds">${NOTIFY_KINDS.map(k => `<label class="tick"><input type="checkbox" data-kind="${k}" ${(s.event_kinds || []).includes(k) ? 'checked' : ''}> ${KIND_LABELS[k]}</label>`).join('')}</div>
+      </div>
+      <div class="actions"><button class="btn primary" type="submit">Save</button></div></form>
+    <section class="card"><div class="card-h"><h3>The next 7 days</h3><span class="meta">${upcoming.length} reminders</span></div>
+      <div class="nextrem">${upcoming.slice(0, 12).map(r => { const l = msToLocal(r.at, off()); return `<div><span>${esc(r.title)}</span><span>${prettyDate(l.date)} ${l.time}</span></div>`; }).join('') || '<p class="muted">Nothing scheduled.</p>'}</div>
+      ${upcoming.length > 12 ? `<p class="meta">and ${upcoming.length - 12} more</p>` : ''}</section>
+    <section class="card"><div class="card-h"><h3>Term dates</h3></div>
+      <div class="two"><div class="field"><label for="t-start">Term starts</label><input class="in" type="date" id="t-start" value="${s.term_start}"></div>
+        <div class="field"><label for="t-end">Classes end</label><input class="in" type="date" id="t-end" value="${s.term_end}"></div></div>
+      <div class="lbl">Days with no classes <span class="muted">(no class reminders; tap one to remove it)</span></div>
+      <div class="dates">${(s.skip_dates || []).slice().sort().map(d => `<button data-unskip="${d}" aria-label="Remove ${prettyDate(d)}">${prettyDate(d)}</button>`).join('') || '<p class="muted">None.</p>'}</div>
+      <div class="inline"><input class="in" type="date" id="t-skip" aria-label="Add a day with no classes"><button class="btn" data-act="skip-add">Add day</button>
+        <button class="btn primary" data-act="term-save" style="margin-left:auto">Save dates</button></div></section>
+    <section class="card"><div class="card-h"><h3>Account</h3></div>
+      <div class="inline" style="justify-content:space-between"><span class="mono" style="font-size:13px">${esc(st.session.user.email)}</span><button class="btn" data-act="signout">Sign out</button></div></section>
+  </div>`;
 }
 
 // ---------- sheets ----------
@@ -391,15 +476,15 @@ function openEvent(e, date) {
   const kinds = Object.keys(KIND_LABELS);
   $sheet.innerHTML = `<form method="dialog" id="evform">
     <h2>${isNew ? 'Add item' : 'Edit item'}</h2>
-    <div class="two"><div class="field"><label for="f-course">Course</label><select id="f-course">${COURSES.map(c => `<option ${c === e.course ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
-      <div class="field"><label for="f-kind">Type</label><select id="f-kind">${kinds.map(k => `<option value="${k}" ${k === e.kind ? 'selected' : ''}>${KIND_LABELS[k]}</option>`).join('')}</select></div></div>
-    <div class="field"><label for="f-title">Title</label><input id="f-title" required value="${esc(e.title)}" placeholder="e.g. Midterm exam"></div>
-    <div class="two"><div class="field"><label for="f-date">Date</label><input id="f-date" type="date" required value="${l.date}"></div>
-      <div class="field"><label for="f-time">Time</label><input id="f-time" type="time" value="${e.all_day ? '' : l.time}"></div></div>
-    <label class="check small"><input type="checkbox" id="f-allday" ${e.all_day ? 'checked' : ''}> All day (no time)</label>
-    <div class="two"><div class="field"><label for="f-weight">Weight</label><input id="f-weight" value="${esc(e.weight || '')}" placeholder="20%"></div>
-      <div class="field"><label for="f-note">Note</label><input id="f-note" value="${esc(e.note || '')}" placeholder="Room, chapters…"></div></div>
-    <label class="check small"><input type="checkbox" id="f-remind" ${e.remind !== false ? 'checked' : ''}> Remind me the day before</label>
+    <div class="two"><div class="field"><label for="f-course">Course</label><select class="in" id="f-course">${COURSES.map(c => `<option ${c === e.course ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+      <div class="field"><label for="f-kind">Type</label><select class="in" id="f-kind">${kinds.map(k => `<option value="${k}" ${k === e.kind ? 'selected' : ''}>${KIND_LABELS[k]}</option>`).join('')}</select></div></div>
+    <div class="field"><label for="f-title">Title</label><input class="in" id="f-title" required value="${esc(e.title)}" placeholder="e.g. Midterm exam"></div>
+    <div class="two"><div class="field"><label for="f-date">Date</label><input class="in" id="f-date" type="date" required value="${l.date}"></div>
+      <div class="field"><label for="f-time">Time</label><input class="in" id="f-time" type="time" value="${e.all_day ? '' : l.time}"></div></div>
+    <label class="tick"><input type="checkbox" id="f-allday" ${e.all_day ? 'checked' : ''}> All day (no time)</label>
+    <div class="two"><div class="field"><label for="f-weight">Weight</label><input class="in" id="f-weight" value="${esc(e.weight || '')}" placeholder="20%"></div>
+      <div class="field"><label for="f-note">Note</label><input class="in" id="f-note" value="${esc(e.note || '')}" placeholder="Room, chapters…"></div></div>
+    <label class="tick"><input type="checkbox" id="f-remind" ${e.remind !== false ? 'checked' : ''}> Remind me the day before</label>
     <div class="actions">${isNew ? '' : '<button class="btn danger left" value="delete" type="button" id="f-del">Delete</button>'}
       <button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" type="submit" id="f-save">Save</button></div>
   </form>`;
@@ -436,13 +521,13 @@ function openClass(c) {
   c = c || { course: 'MA 265', kind: 'Lecture', weekday: 0, start_time: '08:30', end_time: '09:45', room: '', instructor: '' };
   $sheet.innerHTML = `<form method="dialog" id="clform">
     <h2>${isNew ? 'Add class' : 'Edit class'}</h2>
-    <div class="two"><div class="field"><label for="c-course">Course</label><select id="c-course">${COURSES.filter(x => x !== 'AUM').map(x => `<option ${x === c.course ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
-      <div class="field"><label for="c-kind">Type</label><select id="c-kind">${['Lecture', 'Lab'].map(x => `<option ${x === c.kind ? 'selected' : ''}>${x}</option>`).join('')}</select></div></div>
-    <div class="field"><label for="c-day">Day</label><select id="c-day">${DAYS.map((d, i) => `<option value="${i}" ${i === Number(c.weekday) ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
-    <div class="two"><div class="field"><label for="c-start">Starts</label><input id="c-start" type="time" required value="${hhmm(c.start_time)}"></div>
-      <div class="field"><label for="c-end">Ends</label><input id="c-end" type="time" required value="${hhmm(c.end_time)}"></div></div>
-    <div class="two"><div class="field"><label for="c-room">Room</label><input id="c-room" value="${esc(c.room || '')}"></div>
-      <div class="field"><label for="c-who">Instructor</label><input id="c-who" value="${esc(c.instructor || '')}"></div></div>
+    <div class="two"><div class="field"><label for="c-course">Course</label><select class="in" id="c-course">${COURSES.filter(x => x !== 'AUM').map(x => `<option ${x === c.course ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+      <div class="field"><label for="c-kind">Type</label><select class="in" id="c-kind">${['Lecture', 'Lab'].map(x => `<option ${x === c.kind ? 'selected' : ''}>${x}</option>`).join('')}</select></div></div>
+    <div class="field"><label for="c-day">Day</label><select class="in" id="c-day">${DAYS.map((d, i) => `<option value="${i}" ${i === Number(c.weekday) ? 'selected' : ''}>${d}</option>`).join('')}</select></div>
+    <div class="two"><div class="field"><label for="c-start">Starts</label><input class="in" id="c-start" type="time" required value="${hhmm(c.start_time)}"></div>
+      <div class="field"><label for="c-end">Ends</label><input class="in" id="c-end" type="time" required value="${hhmm(c.end_time)}"></div></div>
+    <div class="two"><div class="field"><label for="c-room">Room</label><input class="in" id="c-room" value="${esc(c.room || '')}"></div>
+      <div class="field"><label for="c-who">Instructor</label><input class="in" id="c-who" value="${esc(c.instructor || '')}"></div></div>
     <div class="actions">${isNew ? '' : '<button class="btn danger left" type="button" id="c-del">Delete</button>'}
       <button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" type="submit">Save</button></div>
   </form>`;
@@ -478,17 +563,26 @@ async function saveSettings(patch) {
 }
 
 // ---------- events ----------
+async function toggleDone(id) {
+  const e = st.events.find(x => x.id === id); if (!e) return;
+  const was = !!e.done; e.done = !was; render();
+  const { error } = await sb.from('planner_events').update({ done: e.done, updated_at: new Date().toISOString() }).eq('id', e.id);
+  if (error) { e.done = was; render(); return toast(friendly(error)); }
+  cache();
+}
 function bind() {
   const main = document.getElementById('main');
   main.onclick = async ev => {
-    const el = ev.target.closest('[data-act],[data-go],[data-event],[data-class],[data-day],[data-filt],[data-unskip]');
+    const el = ev.target.closest('[data-act],[data-go],[data-done],[data-event],[data-class],[data-day],[data-strip],[data-filt],[data-unskip]');
     if (!el) return;
     const d = el.dataset;
     if (d.go) return go(d.go);
+    if (d.done) return toggleDone(d.done);
     if (d.event) return openEvent(st.events.find(e => e.id === d.event));
     if (d.class) return openClass(st.classes.find(c => c.id === d.class));
-    if (d.day) { st.selDay = st.selDay === d.day ? null : d.day; render(); if (st.selDay) document.getElementById('daycard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
-    if (d.filt) { st.filt.has(d.filt) ? st.filt.delete(d.filt) : st.filt.add(d.filt); return render(); }
+    if (d.strip) { st.selDay = d.strip; return go('calendar'); }
+    if (d.day) { st.selDay = st.selDay === d.day ? null : d.day; render(); if (st.selDay) document.getElementById('daycard')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); return; }
+    if (d.filt !== undefined) { if (!d.filt) st.filt.clear(); else st.filt.has(d.filt) ? st.filt.delete(d.filt) : st.filt.add(d.filt); return render(); }
     if (d.unskip) { if (await saveSettings({ skip_dates: (st.settings.skip_dates || []).filter(x => x !== d.unskip) })) { toast('Removed.'); render(); } return; }
     switch (d.act) {
       case 'push-on': return enablePush();
@@ -496,6 +590,8 @@ function bind() {
       case 'push-test': return testPush();
       case 'add-event': return openEvent(null, d.date);
       case 'add-class': return openClass(null);
+      case 'clear-sel': st.selDay = null; return render();
+      case 'past': st.showPast = !st.showPast; return render();
       case 'signout': await sb.auth.signOut(); return;
       case 'skip-add': {
         const v = document.getElementById('t-skip').value;
@@ -509,16 +605,6 @@ function bind() {
         if (!a || !b || b < a) return toast('Classes must end after the term starts.');
         if (await saveSettings({ term_start: a, term_end: b })) { toast('Saved.'); render(); }
       }
-    }
-  };
-  main.onchange = async ev => {
-    const t = ev.target;
-    if (t.id === 'showpast') { st.showPast = t.checked; return render(); }
-    if (t.dataset.done) {
-      const e = st.events.find(x => x.id === t.dataset.done);
-      const { error } = await sb.from('planner_events').update({ done: t.checked, updated_at: new Date().toISOString() }).eq('id', e.id);
-      if (error) { t.checked = !t.checked; return toast(friendly(error)); }
-      e.done = t.checked; cache(); render();
     }
   };
   const sf = document.getElementById('setform');
